@@ -376,6 +376,7 @@ DataInfobeta3Dmeta <- function(data, diversity = "TD", datatype = "abundance",
 #'   \item{Diversity}{The diversity type: \code{"TD"}, \code{"meanPD"}, \code{"PD_AUC"}, \code{"FD_tau"}, or \code{"FD_AUC"}, as applicable.}
 #'   \item{Treatment columns}{The standardized diversity or dissimilarity estimates for the two treatments. Column names follow \code{treatment_order}; pooled meta-analysis values are not provided for these columns.}
 #'   \item{Weight}{The percentage inverse-variance weight assigned to each site in the fixed-effect meta-analysis.}
+#'   \item{Effect}{The effect measure used to compare the two treatments, either \code{"Ratio"} or \code{"Difference"}.}
 #' }
 #' The \code{SC} component is a numeric value representing the target standardized sample coverage.
 #'
@@ -607,7 +608,8 @@ iNEXTbeta3Dmeta <- function(data, diversity = "TD", order.q = 0, effect = "ratio
         Order.q = rep(z$Order.q[1], nrow(z) + 1L),
         Diversity = rep(as.character(z$Diversity_T1[1]), nrow(z) + 1L),
         T1 = c(z$qD_T1, NA_real_), T2 = c(z$qD_T2, NA_real_),
-        Weight = c(weight, 100), check.names = FALSE)
+        Weight = c(weight, 100),Effect = if (is_ratio) "Ratio" else "Difference",
+        check.names = FALSE)
       names(ans)[2] <- if (is_ratio) "Ratio" else "Difference"
       names(ans)[8:9] <- treatment_order
       ans
@@ -779,10 +781,16 @@ ggiNEXTmeta <- function(output, order.q, num_round = 3, range = NULL, type = NUL
   order <- meta_output$Order.q[1]
   
   if(is.null(level)){
-    plot_title <- type
+    plot_title <- paste0(
+      "[", effect_type, "] ", diversity, " ", type
+    )
   }else{
     level_show <- if(level <= 1) round(level * 100, 2) else level
-    plot_title <- paste0(type, " (SC = ", level_show, "%)")
+    
+    plot_title <- paste0(
+      "[", effect_type, "] ", diversity, " ", type,
+      " (SC = ", level_show, "%)"
+    )
   }
   
   forestplot_q <- tibble::tibble(
