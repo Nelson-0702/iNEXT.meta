@@ -1,0 +1,814 @@
+---
+title: "An Introduction to iNEXT.meta via Examples"
+author: "Anne Chao, Yu-Ti Lee, Keng-Lei Lin, and Po-Yen Chuang"
+date: "Version 1.1.0 (November 2026)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{An Introduction to iNEXT.meta via Examples}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse=TRUE, comment="#>", fig.retina=2, fig.align="center",
+                      fig.width=15, fig.height=7, out.width="100%", warning=FALSE, message=FALSE)
+options(width=110, digits=3)
+library(iNEXT.meta)
+```
+
+The `iNEXT.meta` package extends the coverage-standardization framework of `iNEXT.beta3D` (Chao et al., 2023) to meta-analysis of treatment effects across studies or sites. It compares two treatments using a **response ratio** (`effect="ratio"`) or **difference** (`effect="difference"`) in coverage-standardized taxonomic (TD), phylogenetic (PD), or functional (FD) diversity. The package summarizes treatment effects on gamma, alpha, and beta diversity and four dissimilarity measures (`1-C`, `1-U`, `1-V`, and `1-S`) through meta-analysis. The package produces forest plots of site-specific effects and the pooled treatment effect.
+
+Following the example-oriented presentation of the `iNEXT.beta3D` vignette, this document illustrates data input formats, documents every function argument, and provides a separate description for every forest-plot output and data-information table. The forest plots are generated directly from the analysis outputs during knitting. The examples use the included `Spider` (abundance) and `Hoverfly` (incidence raw) datasets.
+
+## <span style="color:red;">SOFTWARE NEEDED TO RUN iNEXT.meta IN R</span>
+
+- Required: [R](https://cran.r-project.org/)
+- Suggested: [RStudio IDE](https://posit.co/products/open-source/rstudio/)
+
+## <span style="color:red;">HOW TO RUN iNEXT.meta</span>
+
+For first-time installation, install the required packages, then load `iNEXT.meta`:
+
+```{r installation, eval=FALSE}
+
+## install the iNEXT.meta package from GitHub
+install.packages("remotes")
+remotes::install_github("AnneChao/iNEXT.beta3D")
+remotes::install_github("AnneChao/iNEXT.meta")
+
+## import packages
+library(iNEXT.meta)
+```
+
+
+There are three main functions in this package:
+
+- **iNEXTbeta3Dmeta()**: Computes treatment effects for coverage-standardized gamma, alpha, and beta diversity and four dissimilarity indices, and combines them with meta-analysis.
+
+- **ggiNEXTmeta()**: Displays forest plots of the site-specific and pooled effects.
+
+- **DataInfobeta3Dmeta()**: Summarizes the pooled (gamma) and joint (alpha) reference-sample information and the alpha-reference coverage at twice the reference sample size.
+
+
+
+
+## <span style="color:red;">DATA INPUT FORMAT</span>
+
+To perform meta-analysis of treatment effects on taxonomic, phylogenetic, and functional diversity across multiple studies or sites, information on species identity, study/site affiliation, and treatment assignment is required.
+
+The input data should be organized as a single data frame, with the first columns specifying study/site and treatment information, followed by species abundance or incidence records. The function automatically processes these records according to the specified data type and computes coverage-standardized diversity measures for each treatment within each study/site.
+
+Two types of species abundance/incidence data are supported:
+
+1. **Individual-based abundance data (`datatype = "abundance"`):** The input data should be organized as a data frame in which the first two columns specify the study/site (`Site`) and treatment (`Treatment`). An optional `Patch` column may be included to identify individual sampling patches. The remaining columns represent species, with species names used as column names and nonnegative integer values representing the observed abundances of each species.
+
+   Each row represents a sampling patch or an assemblage belonging to a specific study/site and treatment. For each study/site, observations are grouped according to treatment, and the abundance records are internally converted into the species-by-assemblage matrices required by `iNEXT.beta3D()`. Different studies/sites may contain different numbers of sampling patches. The function then computes standardized gamma, alpha, and beta diversity, together with four classes of dissimilarity measures, for each treatment.
+
+2. **Sampling-unit-based incidence raw data (`datatype = "incidence_raw"`):** The input data should be organized as a data frame in which the first three columns specify the study/site (`Site`), treatment (`Treatment`), and sampling patch (`Patch`). An optional `Sampling_unit` column may be included to identify individual sampling units within each patch. The remaining columns represent species, with each entry being either 0 (non-detection) or 1 (detection).
+
+   Each row represents one sampling unit within a particular patch. Records belonging to the same combination of `Site`, `Treatment`, and `Patch` are grouped to form a species-by-sampling-unit incidence matrix. Each patch is treated as an assemblage, and multiple patch matrices are combined within each study/site and treatment. The number of sampling units should be consistent among assemblages within the corresponding analysis dataset, as required by the underlying `iNEXT.beta3D()` framework.
+
+   Patches containing no observed species across all sampling units are excluded before diversity estimation. If removing empty patches eliminates an entire study/site-by-treatment combination, the function stops and reports an error. The retained incidence data are then used to estimate coverage-standardized diversity and dissimilarity measures.
+
+For both data types, each study/site must contain observations from the two treatments specified in `treatment_order`. The treatment effect is defined either as a response ratio (`effect = "ratio"`) or as a difference (`effect = "difference"`). The resulting site-specific effects are subsequently combined through meta-analysis.
+
+### Species abundance data format
+
+We use the spider species abundance data included in the `iNEXT.meta` package to illustrate the required input format. The dataset, named `Spider`, contains abundance records for 199 spider species collected across 11 study sites (B04, B05, B06, B07, H09, L11, P08, S10, U01, U02, and U03). At each site, observations are classified into two treatments, `Control` and `Enhanced`.
+
+The first three columns of the dataset are `Site`, `Treatment`, and `Patch`, followed by species abundance columns. Each row corresponds to an individual sampling patch, and each species column records the number of observed individuals within that patch. The abundance records are internally converted into the data structure required for coverage-standardized diversity estimation.
+
+Run the following code to view the first six rows and seven columns of the dataset:
+
+```{r spider-data-example, eval=FALSE}
+data("Spider")
+head(Spider[, 1:7])
+```
+
+```{r spider-data-output, echo=FALSE}
+data("Spider")
+head(Spider[, 1:7])
+```
+
+### Species incidence raw data format
+
+We use the hoverfly species incidence data included in the `iNEXT.meta` package to illustrate the sampling-unit-based incidence raw format. The dataset, named `Hoverfly`, contains species detection and non-detection records collected across multiple study sites under two treatments, `Control` and `Enhanced`.
+
+The first four columns are `Site`, `Treatment`, `Patch`, and `Sampling_unit`, followed by species incidence columns. Each row represents one sampling unit within a particular patch, and each species is recorded as 1 if detected and 0 otherwise.
+
+For each combination of study/site, treatment, and patch, the function converts the corresponding observations into a species-by-sampling-unit incidence matrix. These matrices are subsequently used to compute coverage-standardized diversity and dissimilarity measures.
+
+Run the following code to view the first six rows and eight columns of the dataset:
+
+```{r hoverfly-data-example, eval=FALSE}
+data("Hoverfly")
+head(Hoverfly[, 1:8])
+```
+
+```{r hoverfly-data-output, echo=FALSE}
+data("Hoverfly")
+head(Hoverfly[, 1:8])
+```
+
+
+### Phylogenetic tree format for PD
+
+To perform phylogenetic diversity (PD) analysis, a phylogenetic tree spanning all species observed across the datasets is required. The tree should contain species names as tip labels and branch lengths representing their evolutionary relationships. The phylogenetic tree can be imported from a Newick-format file and should be represented as a `phylo` object in R.
+
+The `iNEXT.meta` package includes two phylogenetic trees, `Spider_tree` and `Hoverfly_tree`, corresponding to the spider and hoverfly datasets, respectively. These trees provide the phylogenetic information required to compute coverage-standardized PD for the two treatments within each study/site.
+
+For example, the phylogenetic tree spanning the spider species is stored in the R dataset `Spider_tree`. A summary of its tip labels, node labels, and branch-length information is shown below.
+
+```{r spider-tree-example, eval=FALSE}
+data("Spider_tree")
+Spider_tree
+```
+
+```{r spider-tree-output, echo=FALSE}
+data("Spider_tree")
+Spider_tree
+```
+
+Similarly, the phylogenetic tree corresponding to the hoverfly dataset is stored in `Hoverfly_tree`. Run the following code to view its structure.
+
+```{r hoverfly-tree-example, eval=FALSE}
+data("Hoverfly_tree")
+Hoverfly_tree
+```
+
+```{r hoverfly-tree-output, echo=FALSE}
+data("Hoverfly_tree")
+Hoverfly_tree
+```
+
+### Species pairwise distance matrix format for FD
+
+To perform functional diversity (FD) analysis, a pairwise distance matrix among all species observed across the datasets is required. The matrix describes functional differences between species based on their biological traits. For example, functional distances can be computed from species trait data using Gower distance, which accommodates combinations of continuous and categorical traits.
+
+The distance matrix should be square and symmetric, with species names used as both row and column names. Diagonal entries should be zero, indicating no functional distance between a species and itself. The species names in the distance matrix must correspond to those in the abundance or incidence dataset.
+
+The `iNEXT.meta` package includes two species pairwise distance matrices, `Spider_distM` and `Hoverfly_distM`, corresponding to the spider and hoverfly datasets, respectively. These matrices are used to compute coverage-standardized functional diversity and dissimilarity measures.
+
+For example, the species pairwise distance matrix for the spider dataset is stored in `Spider_distM`. The first three rows and three columns are displayed below.
+
+```{r spider-distance-example, eval=FALSE}
+data("Spider_distM")
+Spider_distM[1:3, 1:3]
+```
+
+```{r spider-distance-output, echo=FALSE}
+data("Spider_distM")
+round(Spider_distM[1:3, 1:3], 3)
+```
+Similarly, the species pairwise distance matrix for the hoverfly dataset is stored in `Hoverfly_distM`. The first three rows and three columns are displayed below.
+
+```{r hoverfly-distance-example, eval=FALSE}
+data("Hoverfly_distM")
+Hoverfly_distM[1:3, 1:3]
+```
+
+```{r hoverfly-distance-output, echo=FALSE}
+data("Hoverfly_distM")
+round(Hoverfly_distM[1:3, 1:3], 3)
+```
+## <span style="color:red;">MAIN FUNCTION: <code style="color:red;">iNEXTbeta3Dmeta()</code></span>
+
+```{r function-signature, eval=FALSE}
+iNEXTbeta3Dmeta(data, diversity="TD", order.q=0, effect="ratio",
+                datatype="incidence_raw", level=NULL, nboot=10,
+                treatment_order, conf=0.95, PDtree=NULL,
+                PDreftime=NULL, PDtype="AUC", PDcut_number=30,
+                FDdistM=NULL, FDtype="AUC", FDtau=NULL,
+                FDcut_number=30)
+```
+
+The function has **17 arguments** (including the required `data` and `treatment_order` arguments). All are documented below with their defaults and restrictions, following the terminology in `iNEXT.beta3D` where applicable.
+
+| Argument | Description |
+|:--|:--|
+| `data` | For `datatype = "abundance"`, the input is a `data.frame` whose first two columns identify the study/site and treatment, optionally followed by a `Patch` identifier, then species abundance columns. Each row represents a patch-level assemblage. For `datatype = "incidence_raw"`, the first three columns specify study/site, treatment, and patch, optionally followed by `Sampling_unit`, then species incidence (0/1) columns; each row represents a sampling unit within a patch. For incidence data, all-zero patches are removed before estimation; the function stops if filtering removes an entire Site × Treatment group. |
+| `diversity` | Selection of the diversity type: `diversity = "TD"` for taxonomic diversity, `diversity = "PD"` for phylogenetic diversity, and `diversity = "FD"` for functional diversity. Default is `"TD"`. |
+| `order.q` | A numerical value or vector specifying the diversity orders. Default is `order.q = 0`. Examples use `c(0, 1, 2)` when estimates across several orders are desired. |
+| `effect` | Effect measure used to compare two treatments: `effect = "difference"` for first-treatment diversity minus second-treatment diversity, or `effect = "ratio"` for first-treatment diversity divided by second-treatment diversity. For ratios, the meta-analysis is performed on the log-ratio scale and pooled estimates and confidence intervals are back-transformed to the ratio scale. Default is `effect = "ratio"`. |
+| `datatype` | Type of input data: individual-based abundance data (`datatype = "abundance"`) or sampling-unit-based incidence data (`datatype = "incidence_raw"`). For incidence raw data, species incidence is recorded as 0 (non-detection) or 1 (detection). Default is `datatype = "incidence_raw"`. |
+| `level` | A **single** numeric value specifying the target sample coverage for standardized diversity and dissimilarity estimation, with values greater than 0 and at most 1. If `level = NULL`, the smallest value exceeding 0.5 among the five alpha-coverage summary statistics from `DataInfobeta3Dmeta()` is selected; if none exceeds 0.5, their maximum is used. A user-specified level at most 0.5 is replaced by this automatically selected level. Default is `NULL`. |
+| `nboot` | An integer of **at least 2** specifying the number of bootstrap replications used to estimate sampling uncertainty and site-specific variances for meta-analysis. Unlike `iNEXTbeta3D()`, which permits `nboot = 0`, this function requires at least two replications. Default is `nboot = 10`; 100 or 200 may be used for more accurate uncertainty estimates. |
+| `treatment_order` | A required character vector specifying the **two treatments in order**. For `effect = "difference"`, the first treatment is subtracted by the second (`T1 - T2`); for `effect = "ratio"`, the first is the numerator (`T1 / T2`). Both treatment names must occur in each analyzed study/site, e.g., `c("Enhanced", "Control")`. No default is provided. |
+| `conf` | A number strictly between 0 and 1 specifying the confidence level for the pooled meta-analysis and reported effect intervals. Default is `conf = 0.95`. In the current implementation, this argument controls the meta-analysis confidence level and is not separately passed to the underlying `iNEXTbeta3D()` estimator. |
+| `PDtree` | Required when `diversity = "PD"`. A phylogenetic tree (an R `phylo` object) spanning all observed species across the input data; the tree can be imported from a Newick-format file. Default is `PDtree = NULL`. |
+| `PDreftime` | Argument only for `diversity = "PD"` and `PDtype = "meanPD"`. A numeric value specifying a fixed reference time for phylogenetic diversity. When `PDreftime = NULL` (default), the root age of the phylogenetic tree spanning the pooled observed species is used. |
+| `PDtype` | Argument only for `diversity = "PD"`. `PDtype = "meanPD"` gives the effective number of equally divergent lineages at a specified reference time; `PDtype = "AUC"` integrates and averages mean phylogenetic diversity across reference times from zero to the root age of the tree. Default is `PDtype = "AUC"`; the old `"PD"` option is not accepted. |
+| `PDcut_number` | Argument only for `diversity = "PD"` and `PDtype = "AUC"`. An integer specifying the number of equally spaced numerical integration points between zero and the root age of the phylogenetic tree. Default is `PDcut_number = 30`; the **minimum is 3**. |
+| `FDdistM` | Required when `diversity = "FD"`. A species pairwise distance matrix covering all species observed across the input data; species names must match the corresponding matrix identifiers. Default is `FDdistM = NULL`. |
+| `FDtype` | Argument only for `diversity = "FD"`. `FDtype = "tau_value"` computes FD at a specified threshold of functional distinctiveness; `FDtype = "AUC"` integrates the tau-profile over thresholds ranging from 0 to 1. Default is `FDtype = "AUC"`. |
+| `FDtau` | Argument only for `diversity = "FD"` and `FDtype = "tau_value"`. A numeric threshold between 0 and 1 specifying functional distinctiveness. When `FDtau = NULL` (default), the underlying `iNEXTbeta3D()` calculates the mean pairwise functional distance (Rao’s quadratic entropy) from data pooled **within each treatment**; therefore different treatments may receive different default thresholds. Supply a common value to compare treatments at the same threshold. |
+| `FDcut_number` | Argument only for `diversity = "FD"` and `FDtype = "AUC"`. An integer specifying the number of equally spaced numerical integration points over the interval from 0 to 1. Default is `FDcut_number = 30`; the **minimum is 3**. |
+
+The `level` used here is a **single common coverage** for the meta-analysis, rather than the multiple coverage knots supported by the underlying `iNEXTbeta3D()` function. For incidence-based FD, the current implementation uses an abundance fallback when any retained Site × Treatment has fewer than eight distinct patches; this counts patches, not individual `Sampling_unit` rows.
+
+### Output of `iNEXTbeta3Dmeta()`
+
+The function returns eight list elements: seven summary data frames (`Summary_Gamma`, `Summary_Alpha`, `Summary_Beta`, `Summary_1-C`, `Summary_1-U`, `Summary_1-V`, `Summary_1-S`) and numeric `SC`, the common coverage used in standardization. Each nonempty summary contains rows for sites plus a final `Meta-analysis` row containing the pooled estimate.
+
+| Output column | Description |
+|:--|:--|
+| `Site` | Study/site identifier; `Meta-analysis` indicates the pooled estimate. |
+| `Ratio` / `Difference` | Treatment effect, according to `effect` and `treatment_order`. |
+| `SE` | Standard error on the analysis scale: log-ratio for ratios, original scale for differences. |
+| `LCL`, `UCL` | Confidence limits; log-ratio limits are back-transformed to ratio scale. |
+| `Order.q` | Diversity order. |
+| `Diversity` | Diversity measure, e.g., `TD`, `meanPD`, `PD_AUC`, `FD_tau`, `FD_AUC`. |
+| Treatment-named columns | Coverage-standardized estimates for the two treatments. |
+| `Weight` | Percentage inverse-variance weight of each site. |
+
+The returned summaries report site-specific and pooled treatment effects; separate heterogeneity-statistics tables are not provided.
+
+#### Interpretation of the seven summary outputs
+
+`Summary_Gamma` and `Summary_Alpha` report pooled and within-assemblage diversity treatment effects; `Summary_Beta` reports the effect on multiplicative beta diversity. The four remaining outputs, `Summary_1-C`, `Summary_1-U`, `Summary_1-V`, and `Summary_1-S`, report effects on four distinct normalized dissimilarity indices derived from beta diversity. In all seven summaries, the site rows show the site-specific effects and uncertainties; the final `Meta-analysis` row is a pooled estimate. The reported `Weight` column gives each site's inverse-variance contribution (in percent). `SC` is a single coverage target common to the treatment comparisons, **not** another diversity summary.
+
+A confidence interval for a **ratio** is on the original ratio scale, even though its `SE` is on the log-ratio scale; a confidence interval for a **difference** remains on the difference scale. The plot's horizontal axis must therefore use a null of 1 for ratios and 0 for differences. The standardized diversity values in `Enhanced` and `Control` describe each treatment; `Ratio` and `Difference` describe the comparison.
+
+
+## <span style="color:red;">GRAPHIC DISPLAYS: FUNCTION <code style="color:red;">ggiNEXTmeta()</code></span>
+
+This function produces **forest plots**, not rarefaction/extrapolation curves. It automatically extracts the standardized sample coverage from `output$SC`. For a response ratio, the no-effect reference is 1 on a logarithmic scale; for a difference, it is 0 on a linear scale.
+
+```{r plot-signature, eval=FALSE}
+ggiNEXTmeta(output, order.q, num_round=3, range=NULL, type=NULL)
+```
+
+| Argument | Description |
+|:--|:--|
+| `output` | Result of `iNEXTbeta3Dmeta()`. |
+| `order.q` | A diversity order present in the chosen summary. |
+| `num_round` | Number of decimal places, default 3. |
+| `range` | Optional pair of clipping bounds (both positive for ratios). |
+| `type` | `"Gamma"`, `"Alpha"`, `"Beta"`, `"1-C"`, `"1-U"`, `"1-V"`, or `"1-S"`. |
+
+## <span style="color:blue;">TAXONOMIC DIVERSITY (TD): META-ANALYSIS VIA EXAMPLES</span>
+
+Taxonomic diversity is demonstrated for **both datasets**, using **both** response-ratio (`effect="ratio"`) and difference (`effect="difference"`) treatment effects. For each combination, this vignette illustrates Gamma, Alpha, Beta, and 1-S forest plots. The other dissimilarity types (1-C, 1-U, and 1-V) can be requested using the same plotting interface. Example plotting commands are shown without execution; separate output chunks generate the forest plots during knitting. For shorter build times, `order.q=0` and `nboot=10` are used; for analyses across orders, replace `order.q=0` with `c(0,1,2)` and choose an available order in the plotting function.
+
+A ratio of 1 or a difference of 0 indicates no treatment effect. The first treatment in `treatment_order` is the numerator of the ratio or the minuend of the difference. A forest plot can only be drawn when its summary table contains valid effect estimates and positive estimated variances.
+
+### EXAMPLE 1: Spider abundance data — treatment response ratios
+
+This example compares Enhanced and Control treatments using spider abundance records across study sites. The response ratio quantifies proportional treatment effects on coverage-standardized taxonomic diversity and dissimilarity. We first estimate the site-specific effects and their pooled meta-analysis, then illustrate the available outputs with forest plots.
+
+```{r spider-td-ratio-fit-example, eval=FALSE}
+spider_td_ratio_fit <- iNEXTbeta3Dmeta(data=Spider, diversity="TD", order.q=0, effect="ratio", datatype="abundance", level=NULL, nboot=10, treatment_order=c("Enhanced","Control"), conf=0.95)
+```
+
+```{r spider-td-ratio-fit-output, echo=FALSE, cache=TRUE}
+set.seed(123)
+spider_td_ratio_fit <- iNEXTbeta3Dmeta(data=Spider, diversity="TD", order.q=0, effect="ratio", datatype="abundance", level=NULL, nboot=10, treatment_order=c("Enhanced","Control"), conf=0.95)
+spider_td_ratio_fit$SC
+spider_td_ratio_fit$Summary_Gamma
+```
+
+#### Gamma forest plot
+
+Gamma diversity represents the effective diversity of the pooled assemblage within a site and treatment. Here, the effect is the **Enhanced/Control response ratio**; the null reference is **1**. A value above 1 means a larger measure in Enhanced, whereas a value below 1 means a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r spider-td-ratio-gamma-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_td_ratio_fit, order.q=0, type="Gamma")
+```
+
+```{r spider-td-ratio-gamma-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_td_ratio_fit, order.q=0, num_round=3, range=NULL, type="Gamma"),
+         error=function(e) cat("**Gamma forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### Alpha forest plot
+
+Alpha diversity represents the average within-assemblage effective diversity standardized at the target coverage. Here, the effect is the **Enhanced/Control response ratio**; the null reference is **1**. A value above 1 means a larger measure in Enhanced, whereas a value below 1 means a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r spider-td-ratio-alpha-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_td_ratio_fit, order.q=0, type="Alpha")
+```
+
+```{r spider-td-ratio-alpha-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_td_ratio_fit, order.q=0, num_round=3, range=NULL, type="Alpha"),
+         error=function(e) cat("**Alpha forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### Beta forest plot
+
+Beta diversity is the multiplicative diversity component (gamma divided by alpha), expressed as the effective number of distinct assemblages. Here, the effect is the **Enhanced/Control response ratio**; the null reference is **1**. A value above 1 means a larger measure in Enhanced, whereas a value below 1 means a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r spider-td-ratio-beta-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_td_ratio_fit, order.q=0, type="Beta")
+```
+
+```{r spider-td-ratio-beta-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_td_ratio_fit, order.q=0, num_round=3, range=NULL, type="Beta"),
+         error=function(e) cat("**Beta forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### 1-S forest plot
+
+The 1-S index is a normalized dissimilarity derived from beta diversity and scaled to represent among-assemblage differentiation. Here, the effect is the **Enhanced/Control response ratio**; the null reference is **1**. A value above 1 means a larger measure in Enhanced, whereas a value below 1 means a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r spider-td-ratio-1s-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_td_ratio_fit, order.q=0, type="1-S")
+```
+
+```{r spider-td-ratio-1s-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_td_ratio_fit, order.q=0, num_round=3, range=NULL, type="1-S"),
+         error=function(e) cat("**1-S forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+### EXAMPLE 2: Spider abundance data — treatment differences
+
+Using the same spider abundance dataset, this example switches to `effect="difference"`. The estimated effect is Enhanced minus Control; hence zero, rather than one, is the reference value for no treatment effect.
+
+```{r spider-td-difference-fit-example, eval=FALSE}
+spider_td_difference_fit <- iNEXTbeta3Dmeta(data=Spider, diversity="TD", order.q=0, effect="difference", datatype="abundance", level=NULL, nboot=10, treatment_order=c("Enhanced","Control"), conf=0.95)
+```
+
+```{r spider-td-difference-fit-output, echo=FALSE, cache=TRUE}
+set.seed(123)
+spider_td_difference_fit <- iNEXTbeta3Dmeta(data=Spider, diversity="TD", order.q=0, effect="difference", datatype="abundance", level=NULL, nboot=10, treatment_order=c("Enhanced","Control"), conf=0.95)
+spider_td_difference_fit$SC
+spider_td_difference_fit$Summary_Gamma
+```
+
+#### Gamma forest plot
+
+Gamma diversity represents the effective diversity of the pooled assemblage within a site and treatment. Here, the effect is the **Enhanced minus Control difference**; the null reference is **0**. Positive values mean a larger measure in Enhanced, whereas negative values mean a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r spider-td-difference-gamma-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_td_difference_fit, order.q=0, type="Gamma")
+```
+
+```{r spider-td-difference-gamma-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_td_difference_fit, order.q=0, num_round=3, range=NULL, type="Gamma"),
+         error=function(e) cat("**Gamma forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### Alpha forest plot
+
+Alpha diversity represents the average within-assemblage effective diversity standardized at the target coverage. Here, the effect is the **Enhanced minus Control difference**; the null reference is **0**. Positive values mean a larger measure in Enhanced, whereas negative values mean a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r spider-td-difference-alpha-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_td_difference_fit, order.q=0, type="Alpha")
+```
+
+```{r spider-td-difference-alpha-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_td_difference_fit, order.q=0, num_round=3, range=NULL, type="Alpha"),
+         error=function(e) cat("**Alpha forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+#### Beta forest plot
+
+Beta diversity is the multiplicative diversity component (gamma divided by alpha), expressed as the effective number of distinct assemblages. Here, the effect is the **Enhanced minus Control difference**; the null reference is **0**. Positive values mean a larger measure in Enhanced, whereas negative values mean a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r spider-td-difference-beta-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_td_difference_fit, order.q=0, type="Beta")
+```
+
+```{r spider-td-difference-beta-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_td_difference_fit, order.q=0, num_round=3, range=NULL, type="Beta"),
+         error=function(e) cat("**Beta forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+#### 1-S forest plot
+
+The 1-S index is a normalized dissimilarity derived from beta diversity and scaled to represent among-assemblage differentiation. Here, the effect is the **Enhanced minus Control difference**; the null reference is **0**. Positive values mean a larger measure in Enhanced, whereas negative values mean a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r spider-td-difference-1s-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_td_difference_fit, order.q=0, type="1-S")
+```
+
+```{r spider-td-difference-1s-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_td_difference_fit, order.q=0, num_round=3, range=NULL, type="1-S"),
+         error=function(e) cat("**1-S forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+### EXAMPLE 3: Hoverfly incidence raw data — treatment response ratios
+
+This example applies the meta-analysis to sampling-unit-based hoverfly incidence records. Within each Site × Treatment × Patch combination, species detections are organized into incidence matrices; the response ratio compares Enhanced with Control at a common coverage level.
+
+```{r hoverfly-td-ratio-fit-example, eval=FALSE}
+hoverfly_td_ratio_fit <- iNEXTbeta3Dmeta(data=Hoverfly, diversity="TD", order.q=0, effect="ratio", datatype="incidence_raw", level=NULL, nboot=10, treatment_order=c("Enhanced","Control"), conf=0.95)
+```
+
+```{r hoverfly-td-ratio-fit-output, echo=FALSE, cache=TRUE}
+set.seed(123)
+hoverfly_td_ratio_fit <- iNEXTbeta3Dmeta(data=Hoverfly, diversity="TD", order.q=0, effect="ratio", datatype="incidence_raw", level=NULL, nboot=10, treatment_order=c("Enhanced","Control"), conf=0.95)
+hoverfly_td_ratio_fit$SC
+hoverfly_td_ratio_fit$Summary_Gamma
+```
+
+#### Gamma forest plot
+
+Gamma diversity represents the effective diversity of the pooled assemblage within a site and treatment. Here, the effect is the **Enhanced/Control response ratio**; the null reference is **1**. A value above 1 means a larger measure in Enhanced, whereas a value below 1 means a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r hoverfly-td-ratio-gamma-forest-example, eval=FALSE}
+ggiNEXTmeta(hoverfly_td_ratio_fit, order.q=0, type="Gamma")
+```
+
+```{r hoverfly-td-ratio-gamma-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(hoverfly_td_ratio_fit, order.q=0, num_round=3, range=NULL, type="Gamma"),
+         error=function(e) cat("**Gamma forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### Alpha forest plot
+
+Alpha diversity represents the average within-assemblage effective diversity standardized at the target coverage. Here, the effect is the **Enhanced/Control response ratio**; the null reference is **1**. A value above 1 means a larger measure in Enhanced, whereas a value below 1 means a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r hoverfly-td-ratio-alpha-forest-example, eval=FALSE}
+ggiNEXTmeta(hoverfly_td_ratio_fit, order.q=0, type="Alpha")
+```
+
+```{r hoverfly-td-ratio-alpha-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(hoverfly_td_ratio_fit, order.q=0, num_round=3, range=NULL, type="Alpha"),
+         error=function(e) cat("**Alpha forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+#### Beta forest plot
+
+Beta diversity is the multiplicative diversity component (gamma divided by alpha), expressed as the effective number of distinct assemblages. Here, the effect is the **Enhanced/Control response ratio**; the null reference is **1**. A value above 1 means a larger measure in Enhanced, whereas a value below 1 means a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r hoverfly-td-ratio-beta-forest-example, eval=FALSE}
+ggiNEXTmeta(hoverfly_td_ratio_fit, order.q=0, type="Beta")
+```
+
+```{r hoverfly-td-ratio-beta-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(hoverfly_td_ratio_fit, order.q=0, num_round=3, range=NULL, type="Beta"),
+         error=function(e) cat("**Beta forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+#### 1-S forest plot
+
+The 1-S index is a normalized dissimilarity derived from beta diversity and scaled to represent among-assemblage differentiation. Here, the effect is the **Enhanced/Control response ratio**; the null reference is **1**. A value above 1 means a larger measure in Enhanced, whereas a value below 1 means a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r hoverfly-td-ratio-1s-forest-example, eval=FALSE}
+ggiNEXTmeta(hoverfly_td_ratio_fit, order.q=0, type="1-S")
+```
+
+```{r hoverfly-td-ratio-1s-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(hoverfly_td_ratio_fit, order.q=0, num_round=3, range=NULL, type="1-S"),
+         error=function(e) cat("**1-S forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+### EXAMPLE 4: Hoverfly incidence raw data — treatment differences
+
+This example analyzes the same hoverfly incidence data with `effect="difference"`. A positive result indicates a higher coverage-standardized measure for Enhanced, whereas a negative result indicates a higher measure for Control.
+
+```{r hoverfly-td-difference-fit-example, eval=FALSE}
+hoverfly_td_difference_fit <- iNEXTbeta3Dmeta(data=Hoverfly, diversity="TD", order.q=0, effect="difference", datatype="incidence_raw", level=NULL, nboot=10, treatment_order=c("Enhanced","Control"), conf=0.95)
+```
+
+```{r hoverfly-td-difference-fit-output, echo=FALSE, cache=TRUE}
+set.seed(123)
+hoverfly_td_difference_fit <- iNEXTbeta3Dmeta(data=Hoverfly, diversity="TD", order.q=0, effect="difference", datatype="incidence_raw", level=NULL, nboot=10, treatment_order=c("Enhanced","Control"), conf=0.95)
+hoverfly_td_difference_fit$SC
+hoverfly_td_difference_fit$Summary_Gamma
+```
+
+#### Gamma forest plot
+
+Gamma diversity represents the effective diversity of the pooled assemblage within a site and treatment. Here, the effect is the **Enhanced minus Control difference**; the null reference is **0**. Positive values mean a larger measure in Enhanced, whereas negative values mean a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r hoverfly-td-difference-gamma-forest-example, eval=FALSE}
+ggiNEXTmeta(hoverfly_td_difference_fit, order.q=0, type="Gamma")
+```
+
+```{r hoverfly-td-difference-gamma-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(hoverfly_td_difference_fit, order.q=0, num_round=3, range=NULL, type="Gamma"),
+         error=function(e) cat("**Gamma forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### Alpha forest plot
+
+Alpha diversity represents the average within-assemblage effective diversity standardized at the target coverage. Here, the effect is the **Enhanced minus Control difference**; the null reference is **0**. Positive values mean a larger measure in Enhanced, whereas negative values mean a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r hoverfly-td-difference-alpha-forest-example, eval=FALSE}
+ggiNEXTmeta(hoverfly_td_difference_fit, order.q=0, type="Alpha")
+```
+
+```{r hoverfly-td-difference-alpha-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(hoverfly_td_difference_fit, order.q=0, num_round=3, range=NULL, type="Alpha"),
+         error=function(e) cat("**Alpha forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### Beta forest plot
+
+Beta diversity is the multiplicative diversity component (gamma divided by alpha), expressed as the effective number of distinct assemblages. Here, the effect is the **Enhanced minus Control difference**; the null reference is **0**. Positive values mean a larger measure in Enhanced, whereas negative values mean a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r hoverfly-td-difference-beta-forest-example, eval=FALSE}
+ggiNEXTmeta(hoverfly_td_difference_fit, order.q=0, type="Beta")
+```
+
+```{r hoverfly-td-difference-beta-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(hoverfly_td_difference_fit, order.q=0, num_round=3, range=NULL, type="Beta"),
+         error=function(e) cat("**Beta forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### 1-S forest plot
+
+The 1-S index is a normalized dissimilarity derived from beta diversity and scaled to represent among-assemblage differentiation. Here, the effect is the **Enhanced minus Control difference**; the null reference is **0**. Positive values mean a larger measure in Enhanced, whereas negative values mean a larger measure in Control. Each site is shown with its point estimate and confidence interval; the final diamond summarizes the pooled estimate. Confidence intervals crossing the null line do not exclude a zero treatment effect (on the relevant effect scale) at the indicated confidence level. Interpret the results at the standardized sample coverage (SC) displayed in the figure title.
+
+```{r hoverfly-td-difference-1s-forest-example, eval=FALSE}
+ggiNEXTmeta(hoverfly_td_difference_fit, order.q=0, type="1-S")
+```
+
+```{r hoverfly-td-difference-1s-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(hoverfly_td_difference_fit, order.q=0, num_round=3, range=NULL, type="1-S"),
+         error=function(e) cat("**1-S forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+## <span style="color:blue;">PHYLOGENETIC DIVERSITY (PD): META-ANALYSIS VIA EXAMPLES</span>
+
+Phylogenetic diversity (PD) incorporates the evolutionary relationships among species rather than treating all species as equally distinct. In the Hill–Chao framework used here, **mean phylogenetic diversity (meanPD)** expresses diversity as an effective number of equally divergent lineages. Thus, treatment effects on PD can reveal differences in evolutionary composition that are not apparent from taxonomic diversity alone. As with TD, `iNEXTbeta3Dmeta()` estimates coverage-standardized gamma, alpha and beta diversity, and four dissimilarity measures (`1-C`, `1-U`, `1-V` and `1-S`) for each study/site, before combining the treatment effects by meta-analysis. The output is a set of **forest plots**, not rarefaction/extrapolation curves.
+
+The required PD input is `PDtree`, a phylogenetic tree with branch lengths and tip labels matching species in the abundance or incidence dataset. This vignette uses the included `Spider_tree` for the Spider example. The phylogenetic diversity analysis provides two measures via `PDtype`:
+
+1. **`PDtype = "meanPD"`:** Evaluates phylogenetic diversity at a specified reference time. `PDreftime` specifies that time; when `PDreftime = NULL`, the reference time defaults to the root age of the tree spanning the pooled observed species. At a fixed reference time, meanPD is an effective number of lineages, whereas phylogenetic diversity (PD) measures effective total branch length; they are related by `PD = meanPD × Reftime`. Selecting a reference time can affect the level of phylogenetic resolution emphasized by the analysis.
+2. **`PDtype = "AUC"`:** Provides an overall phylogenetic diversity measure by integrating and averaging meanPD over reference times from zero to the root age. It avoids relying on a single selected reference time and summarizes phylogenetic information across evolutionary depths. This is the default for `iNEXTbeta3Dmeta()`.
+
+For AUC analysis, `PDcut_number` controls the number of equally spaced integration points used to approximate the integral; its default is 30 and the minimum is 3. Increasing this number may improve numerical precision at the expense of computation. `PDreftime` is relevant only to the `meanPD` option and does not need to be supplied for AUC. As in the TD examples, `level = NULL` requests an automatically selected common coverage target; the selected coverage is shown in each forest-plot title.
+
+For the treatment comparisons below, `effect = "ratio"` is used with `treatment_order = c("Enhanced", "Control")`. Ratios greater than 1 indicate higher phylogenetic diversity or dissimilarity under Enhanced; ratios below 1 indicate higher values under Control. The vertical reference line is 1. Individual rows represent site-specific effects, while the final diamond denotes the pooled estimate. Confidence intervals spanning 1 do not exclude equal values between treatments at the reported confidence level.
+
+### EXAMPLE 5: Spider abundance data — phylogenetic diversity (PD AUC)
+
+The Spider dataset contains counts for two treatments across study sites. The `Spider_tree` object provides the corresponding evolutionary tree. We calculate the **AUC-based mean phylogenetic diversity** (`PDtype = "AUC"`) using 30 reference-time integration points, diversity order `q = 0`, and `nboot = 10` bootstrap replications. The analysis then compares Enhanced and Control at a common coverage across sites. The code below generates the seven summary components; the following figures show four selected measures from those outputs.
+
+```{r spider-pd-auc-fit-example, eval=FALSE}
+spider_pd_auc_fit <- iNEXTbeta3Dmeta(data=Spider, diversity="PD", order.q=0, effect="ratio", datatype="abundance", level=NULL, nboot=10, treatment_order=c("Enhanced","Control"), conf=0.95, PDtree=Spider_tree, PDtype="AUC", PDcut_number=30)
+```
+
+```{r spider-pd-auc-fit-output, echo=FALSE, cache=TRUE}
+set.seed(123)
+spider_pd_auc_fit <- iNEXTbeta3Dmeta(data=Spider, diversity="PD", order.q=0, effect="ratio", datatype="abundance", level=NULL, nboot=10, treatment_order=c("Enhanced","Control"), conf=0.95, PDtree=Spider_tree, PDtype="AUC", PDcut_number=30)
+spider_pd_auc_fit$SC
+spider_pd_auc_fit$Summary_Gamma
+```
+
+#### Gamma forest plot
+
+The **phylogenetic gamma diversity** is the AUC-based effective lineage diversity of the pooled assemblage within each site and treatment. The plot compares Enhanced with Control through their ratio at the selected coverage. A ratio above 1 means that the pooled Enhanced assemblages contain greater AUC-based evolutionary diversity; the diamond summarizes the pooled treatment ratio across sites. The no-effect ratio is **1**, and a confidence interval containing 1 does not exclude no treatment difference at the stated confidence level. Interpret the estimates at the sample coverage printed in the plot title.
+
+```{r spider-pd-auc-gamma-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_pd_auc_fit, order.q=0, type="Gamma")
+```
+
+```{r spider-pd-auc-gamma-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_pd_auc_fit, order.q=0, num_round=3, range=NULL, type="Gamma"),
+         error=function(e) cat("**Gamma forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### Alpha forest plot
+
+The **phylogenetic alpha diversity** represents effective lineage diversity within assemblages, averaged according to the alpha-diversity definition used by the estimator. The AUC calculation considers a range of reference times, rather than a single branch-depth cutoff. The forest plot shows how this within-assemblage evolutionary diversity differs between Enhanced and Control across sites. The no-effect ratio is **1**, and a confidence interval containing 1 does not exclude no treatment difference at the stated confidence level. Interpret the estimates at the sample coverage printed in the plot title.
+
+```{r spider-pd-auc-alpha-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_pd_auc_fit, order.q=0, type="Alpha")
+```
+
+```{r spider-pd-auc-alpha-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_pd_auc_fit, order.q=0, num_round=3, range=NULL, type="Alpha"),
+         error=function(e) cat("**Alpha forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### Beta forest plot
+
+The **phylogenetic beta diversity** is the multiplicative ratio of phylogenetic gamma to alpha diversity. It expresses the effective extent of differentiation in evolutionary lineages among assemblages. Values of the Enhanced/Control treatment ratio above 1 indicate greater phylogenetic differentiation under Enhanced; a pooled ratio below 1 indicates the reverse. The no-effect ratio is **1**, and a confidence interval containing 1 does not exclude no treatment difference at the stated confidence level. Interpret the estimates at the sample coverage printed in the plot title.
+
+```{r spider-pd-auc-beta-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_pd_auc_fit, order.q=0, type="Beta")
+```
+
+```{r spider-pd-auc-beta-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_pd_auc_fit, order.q=0, num_round=3, range=NULL, type="Beta"),
+         error=function(e) cat("**Beta forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### 1-S forest plot
+
+The **phylogenetic 1-S index** is a normalized dissimilarity derived from phylogenetic beta diversity. It reflects differentiation in the evolutionary composition of assemblages, rather than simply the number of observed species. The forest plot compares this measure between Enhanced and Control using a site-specific response ratio and a pooled estimate. The no-effect ratio is **1**, and a confidence interval containing 1 does not exclude no treatment difference at the stated confidence level. Interpret the estimates at the sample coverage printed in the plot title.
+
+```{r spider-pd-auc-1s-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_pd_auc_fit, order.q=0, type="1-S")
+```
+
+```{r spider-pd-auc-1s-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_pd_auc_fit, order.q=0, num_round=3, range=NULL, type="1-S"),
+         error=function(e) cat("**1-S forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+## <span style="color:blue;">FUNCTIONAL DIVERSITY (FD): META-ANALYSIS VIA EXAMPLES</span>
+
+Functional diversity (FD) takes account of differences in species traits rather than relying only on species identity or evolutionary history. Within the Hill–Chao framework, FD expresses the effective number of functional groups represented in an assemblage. Consequently, a treatment may change functional gamma, alpha or beta diversity even when changes in taxonomic diversity are small. `iNEXTbeta3Dmeta()` calculates coverage-standardized FD and four associated dissimilarity measures within each study/site and combines **treatment effects** through meta-analysis; the plots below summarize those treatment comparisons.
+
+The essential input is `FDdistM`, a species-by-species functional distance matrix covering the species in the dataset. Matrix row and column labels must correspond to species names, and the distances are normally nonnegative, symmetric, and zero along the diagonal. Trait distances may, for example, be computed using Gower distance. Here the example uses the supplied `Spider_distM` matrix. Two FD measures can be selected through `FDtype`:
+
+1. **`FDtype = "tau_value"`:** Estimates functional diversity at a specified functional-distinctiveness threshold, τ. `FDtau` specifies the threshold and allows the analyst to focus on a chosen degree of functional differentiation. In the current meta-analysis implementation, if `FDtau = NULL`, the underlying computation derives its default threshold from the data pooled **within each treatment**, so the default threshold may differ between treatments. A common, explicitly supplied `FDtau` is preferable when the scientific question requires comparison at exactly the same threshold.
+2. **`FDtype = "AUC"`:** Integrates the functional diversity tau-profile over threshold values from 0 to 1 and provides a summary across the full range, rather than relying on one threshold. This is the default FD option and is used in Example 6.
+
+For FD AUC, `FDcut_number` specifies the number of equally spaced integration points between 0 and 1 (default 30, minimum 3). More points may improve numerical approximation, although at greater computational cost. The results report gamma diversity for pooled assemblages, alpha diversity for within-assemblage diversity, beta diversity for their multiplicative relationship, and normalized functional dissimilarities for among-assemblage differentiation.
+
+We use the Spider abundance data, `FDtype = "AUC"`, and a common coverage selected with `level = NULL`. Effects are Enhanced/Control response ratios; 1 is the no-effect value. A ratio greater than 1 represents higher AUC-based functional diversity or dissimilarity in Enhanced, while a ratio below 1 favors Control. Each forest plot gives site-level estimates and confidence intervals together with a pooled estimate. These are **effects on functional diversity**, not absolute trait distances or tau-profile curves.
+
+### EXAMPLE 6: Spider abundance data — functional diversity (FD AUC)
+
+The same Spider abundance data are combined with `Spider_distM`, the species pairwise functional distance matrix. We use **AUC-based functional diversity** (`FDtype = "AUC"`) with 30 integration points covering τ from 0 to 1. At order `q = 0`, the standardized functional gamma, alpha and beta diversities and the functional dissimilarity measures are estimated for Enhanced and Control at a common coverage. Site-specific treatment ratios and the pooled summary are presented below. The numerical results should not be interpreted as calculations at a single τ value.
+
+```{r spider-fd-auc-fit-example, eval=FALSE}
+spider_fd_auc_fit <- iNEXTbeta3Dmeta(data=Spider, diversity="FD", order.q=0, effect="ratio", datatype="abundance", level=NULL, nboot=10, treatment_order=c("Enhanced","Control"), conf=0.95, FDdistM=Spider_distM, FDtype="AUC", FDcut_number=30)
+```
+
+```{r spider-fd-auc-fit-output, echo=FALSE, cache=TRUE}
+set.seed(123)
+spider_fd_auc_fit <- iNEXTbeta3Dmeta(data=Spider, diversity="FD", order.q=0, effect="ratio", datatype="abundance", level=NULL, nboot=10, treatment_order=c("Enhanced","Control"), conf=0.95, FDdistM=Spider_distM, FDtype="AUC", FDcut_number=30)
+spider_fd_auc_fit$SC
+spider_fd_auc_fit$Summary_Gamma
+```
+
+#### Gamma forest plot
+
+The **functional gamma diversity** summarizes AUC-based functional diversity for the pooled assemblage within a study/site and treatment. Because AUC integrates over distinctiveness thresholds, the result reflects the overall spread of functional differences rather than FD at one selected τ. The figure displays the Enhanced/Control ratio for each site and its pooled estimate. The no-effect ratio is **1**, and a confidence interval containing 1 does not exclude no treatment difference at the stated confidence level. Interpret the estimates at the sample coverage printed in the plot title.
+
+```{r spider-fd-auc-gamma-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_fd_auc_fit, order.q=0, type="Gamma")
+```
+
+```{r spider-fd-auc-gamma-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_fd_auc_fit, order.q=0, num_round=3, range=NULL, type="Gamma"),
+         error=function(e) cat("**Gamma forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### Alpha forest plot
+
+The **functional alpha diversity** summarizes AUC-based within-assemblage functional diversity. A higher value indicates greater effective diversity of functional groups within assemblages, under the chosen coverage standardization. The forest plot compares Enhanced and Control at that common coverage, with confidence intervals describing uncertainty in the treatment ratio. The no-effect ratio is **1**, and a confidence interval containing 1 does not exclude no treatment difference at the stated confidence level. Interpret the estimates at the sample coverage printed in the plot title.
+
+```{r spider-fd-auc-alpha-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_fd_auc_fit, order.q=0, type="Alpha")
+```
+
+```{r spider-fd-auc-alpha-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_fd_auc_fit, order.q=0, num_round=3, range=NULL, type="Alpha"),
+         error=function(e) cat("**Alpha forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### Beta forest plot
+
+The **functional beta diversity** is the multiplicative functional gamma-to-alpha ratio and reflects differentiation in functional composition among assemblages. This measure can respond to changes in species traits even when the corresponding taxonomic beta diversity changes little. The forest plot presents the treatment response ratio for each site and its pooled summary. The no-effect ratio is **1**, and a confidence interval containing 1 does not exclude no treatment difference at the stated confidence level. Interpret the estimates at the sample coverage printed in the plot title.
+
+```{r spider-fd-auc-beta-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_fd_auc_fit, order.q=0, type="Beta")
+```
+
+```{r spider-fd-auc-beta-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_fd_auc_fit, order.q=0, num_round=3, range=NULL, type="Beta"),
+         error=function(e) cat("**Beta forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+#### 1-S forest plot
+
+The **functional 1-S index** is a normalized dissimilarity derived from functional beta diversity. Here it summarizes among-assemblage functional differentiation using the AUC approach across τ from 0 to 1. A ratio above 1 indicates greater functional dissimilarity under Enhanced, and a ratio below 1 indicates greater dissimilarity under Control. The no-effect ratio is **1**, and a confidence interval containing 1 does not exclude no treatment difference at the stated confidence level. Interpret the estimates at the sample coverage printed in the plot title.
+
+```{r spider-fd-auc-1s-forest-example, eval=FALSE}
+ggiNEXTmeta(spider_fd_auc_fit, order.q=0, type="1-S")
+```
+
+```{r spider-fd-auc-1s-forest-output, echo=FALSE, fig.width=15, fig.height=7, out.width="100%", results='asis'}
+tryCatch(ggiNEXTmeta(spider_fd_auc_fit, order.q=0, num_round=3, range=NULL, type="1-S"),
+         error=function(e) cat("**1-S forest plot unavailable:** ", conditionMessage(e), "\n\n", sep=""))
+```
+
+## <span style="color:red;">DATA INFORMATION: FUNCTION <code style="color:red;">DataInfobeta3Dmeta()</code></span>
+
+This function provides information for the pooled assemblage (gamma reference sample) and joint assemblage (alpha reference sample) for each Site × Treatment. The returned list contains `DataInfo` and `Summary_Coverage`; the latter summarizes joint-assemblage coverage at `2n` for abundance or `2T` for incidence. We demonstrate **both Spider and Hoverfly for every diversity dimension (TD, PD and FD)**.
+
+```{r information-signature, eval=FALSE}
+DataInfobeta3Dmeta(data, diversity="TD", datatype="abundance",
+                   PDtree=NULL, PDreftime=NULL, PDtype="meanPD",
+                   FDdistM=NULL, FDtype="AUC", FDtau=NULL)
+```
+
+All **nine arguments** are described below, consistently with `iNEXT.beta3D` where applicable:
+
+| Argument | Description |
+|:--|:--|
+| `data` | A data frame with Site and Treatment in the first two columns for abundance data (optional `Patch`), or Site, Treatment, Patch in the first three columns for incidence raw data (optional `Sampling_unit`), followed by species columns. |
+| `diversity` | Selection of the diversity type: `"TD"` for taxonomic diversity, `"PD"` for phylogenetic diversity, or `"FD"` for functional diversity. Default `"TD"`. |
+| `datatype` | Individual-based abundance data (`"abundance"`) or sampling-unit-based incidence data (`"incidence_raw"`), with detection recorded as 0 or 1. Default `"abundance"`. |
+| `PDtree` | Required for PD: a `phylo` tree spanning all observed species across the input data. Default `NULL`. |
+| `PDreftime` | For PD with `PDtype="meanPD"` only: fixed reference time; `NULL` (default) uses the root age of the tree spanning pooled observed species. |
+| `PDtype` | For PD: `"meanPD"` (effective number of equally divergent lineages) or `"AUC"` (integrated meanPD over reference times). Default **`"meanPD"`** for this function. |
+| `FDdistM` | Required for FD: a species pairwise distance matrix covering all observed species across the input data. Default `NULL`. |
+| `FDtype` | For FD: `"tau_value"` (specific functional-distinctiveness threshold) or `"AUC"` (integrated tau-profile from 0 to 1). Default `"AUC"`. |
+| `FDtau` | For FD with `FDtype="tau_value"`: threshold between 0 and 1. `NULL` (default) uses a mean pairwise distance derived from pooled input data (Rao's quadratic entropy). |
+
+**Output.** `DataInfo` includes reference sample size, observed richness, sample coverage and measure-dependent columns. `Summary_Coverage` provides `C_Min`, `C_25quantile`, `C_50quantile`, `C_75quantile`, and `C_Max` based on joint-assemblage `SC(2n)` or `SC(2T)`.
+
+### Taxonomic diversity (TD): Spider and Hoverfly
+
+#### Spider (abundance)
+
+```{r info-spider-td-example, eval=FALSE}
+info_spider_td <- DataInfobeta3Dmeta(data=Spider, diversity="TD", datatype="abundance")
+info_spider_td$DataInfo
+info_spider_td$Summary_Coverage
+```
+
+```{r info-spider-td-output, echo=FALSE, cache=FALSE}
+info_spider_td <- DataInfobeta3Dmeta(data=Spider, diversity="TD", datatype="abundance")
+head(info_spider_td$DataInfo, 10)
+info_spider_td$Summary_Coverage
+```
+
+The `DataInfo` table lists the pooled assemblage (gamma reference) and joint assemblage (alpha reference) for each Site × Treatment. For abundance data, `n` is reference sample size; `S.obs` is observed species richness; `SC(n)` and `SC(2n)` estimate reference and doubled-sample coverage; `f1`–`f5` are the first five species-abundance frequency counts. The accompanying `Summary_Coverage` table reports `C_Min`, `C_25quantile`, `C_50quantile`, `C_75quantile` and `C_Max`, the five summaries of **joint-assemblage coverage at twice the reference sample size**, across site–treatment combinations. These numbers summarize coverage, not treatment-effect sizes.
+
+#### Hoverfly (incidence_raw)
+
+```{r info-hoverfly-td-example, eval=FALSE}
+info_hoverfly_td <- DataInfobeta3Dmeta(data=Hoverfly, diversity="TD", datatype="incidence_raw")
+info_hoverfly_td$DataInfo
+info_hoverfly_td$Summary_Coverage
+```
+
+```{r info-hoverfly-td-output, echo=FALSE, cache=FALSE}
+info_hoverfly_td <- DataInfobeta3Dmeta(data=Hoverfly, diversity="TD", datatype="incidence_raw")
+head(info_hoverfly_td$DataInfo, 10)
+info_hoverfly_td$Summary_Coverage
+```
+
+ The `DataInfo` table lists the pooled assemblage (gamma reference) and joint assemblage (alpha reference) for each Site × Treatment. For incidence data, `T` is the number of sampling units and `U` is total incidence frequency; `SC(T)` and `SC(2T)` give reference and doubled-sampling-unit coverage; `Q1`–`Q5` are the first five species incidence-frequency counts. The accompanying `Summary_Coverage` table reports `C_Min`, `C_25quantile`, `C_50quantile`, `C_75quantile` and `C_Max`, the five summaries of **joint-assemblage coverage at twice the reference sample size**, across site–treatment combinations. These numbers summarize coverage, not treatment-effect sizes.
+
+### Phylogenetic diversity (PD AUC): Spider and Hoverfly
+
+#### Spider (abundance)
+
+```{r info-spider-pd-example, eval=FALSE}
+info_spider_pd <- DataInfobeta3Dmeta(data=Spider, diversity="PD", datatype="abundance", PDtree=Spider_tree, PDtype="AUC")
+info_spider_pd$DataInfo
+info_spider_pd$Summary_Coverage
+```
+
+```{r info-spider-pd-output, echo=FALSE, cache=FALSE}
+info_spider_pd <- DataInfobeta3Dmeta(data=Spider, diversity="PD", datatype="abundance", PDtree=Spider_tree, PDtype="AUC")
+head(info_spider_pd$DataInfo, 10)
+info_spider_pd$Summary_Coverage
+```
+
+A phylogenetic reference-sample summary is returned for each Site × Treatment and for the pooled (gamma) and joint (alpha) assemblages. In abundance data, `n` denotes sample size; `S.obs` is the number of observed species; and `SC(n)` and `SC(2n)` are estimated coverage for the reference and doubled samples. For the AUC method, `Tmax` (when present) is the root-age endpoint over which the reference-time profile is integrated. Unlike `meanPD`, which uses a single reference time and can report branch-length summaries such as `PD.obs` and `Reftime`, AUC integrates across depths. `Summary_Coverage` lists `C_Min`, `C_25quantile`, `C_50quantile`, `C_75quantile`, and `C_Max`, computed from joint-assemblage doubled-sample coverage across site–treatment groups. These are coverage diagnostics, not treatment effects.
+
+#### Hoverfly (incidence_raw)
+
+```{r info-hoverfly-pd-example, eval=FALSE}
+info_hoverfly_pd <- DataInfobeta3Dmeta(data=Hoverfly, diversity="PD", datatype="incidence_raw", PDtree=Hoverfly_tree, PDtype="AUC")
+info_hoverfly_pd$DataInfo
+info_hoverfly_pd$Summary_Coverage
+```
+
+```{r info-hoverfly-pd-output, echo=FALSE, cache=FALSE}
+info_hoverfly_pd <- DataInfobeta3Dmeta(data=Hoverfly, diversity="PD", datatype="incidence_raw", PDtree=Hoverfly_tree, PDtype="AUC")
+head(info_hoverfly_pd$DataInfo, 10)
+info_hoverfly_pd$Summary_Coverage
+```
+
+The incidence-based phylogenetic summary is organized by Site, Treatment and reference assemblage. The incidence reference sample is described by `T` (number of sampling units), `U` (total incidences), `S.obs` (observed species richness), and coverage at `T` and `2T`, where these columns are returned. Under `PDtype = "AUC"`, `Tmax` (if reported) denotes the maximum reference time, namely the root age. `Summary_Coverage` provides the five summary values for doubled reference coverage of the joint assemblages, which guide selection of a common coverage but do not themselves measure evolutionary differentiation.
+
+### Functional diversity (FD AUC): Spider and Hoverfly
+
+#### Spider (abundance)
+
+```{r info-spider-fd-example, eval=FALSE}
+info_spider_fd <- DataInfobeta3Dmeta(data=Spider, diversity="FD", datatype="abundance", FDdistM=Spider_distM, FDtype="AUC")
+info_spider_fd$DataInfo
+info_spider_fd$Summary_Coverage
+```
+
+```{r info-spider-fd-output, echo=FALSE, cache=FALSE}
+info_spider_fd <- DataInfobeta3Dmeta(data=Spider, diversity="FD", datatype="abundance", FDdistM=Spider_distM, FDtype="AUC")
+head(info_spider_fd$DataInfo, 10)
+info_spider_fd$Summary_Coverage
+```
+
+The functional data summary reports reference-sample information for pooled (gamma) and joint (alpha) assemblages within each site and treatment. For abundance records, reference sample size (`n`), observed richness (`S.obs`) and coverage (`SC(n)`, `SC(2n)`) describe sampling completeness. When present, `dmin` is the smallest non-diagonal species distance, `dmax` is the largest species distance, and `dmean` summarizes mean pairwise functional distance. These summarize the input distance structure and should not be confused with the AUC diversity estimate. `Summary_Coverage` reports the minimum, quartiles, median and maximum of doubled-sample joint-assemblage coverage.
+
+#### Hoverfly (incidence_raw)
+
+```{r info-hoverfly-fd-example, eval=FALSE}
+info_hoverfly_fd <- DataInfobeta3Dmeta(data=Hoverfly, diversity="FD", datatype="incidence_raw", FDdistM=Hoverfly_distM, FDtype="AUC")
+info_hoverfly_fd$DataInfo
+info_hoverfly_fd$Summary_Coverage
+```
+
+```{r info-hoverfly-fd-output, echo=FALSE, cache=FALSE}
+info_hoverfly_fd <- DataInfobeta3Dmeta(data=Hoverfly, diversity="FD", datatype="incidence_raw", FDdistM=Hoverfly_distM, FDtype="AUC")
+head(info_hoverfly_fd$DataInfo, 10)
+info_hoverfly_fd$Summary_Coverage
+```
+
+Functional information is obtained using the Hoverfly incidence records and its species functional-distance matrix. The `DataInfo` rows identify each site, treatment and pooled/joint reference assemblage; distance summaries such as `dmin`, `dmean`, and `dmax`, when present, describe functional distances. The coverage fields should be interpreted using the actual returned data type: in this implementation incidence-based FD may fall back to an abundance representation if a Site × Treatment group has fewer than eight distinct patches. `Summary_Coverage` summarizes doubled-reference joint coverage, not the Enhanced/Control effect. The `FDtype = "AUC"` choice integrates over all thresholds rather than reporting FD at a single τ.
+
+## <span style="color:red;">NOTES ON INTERPRETATION AND REPRODUCIBILITY</span>
+
+For response ratios, meta-analysis is performed on the log-ratio scale, while reported ratios and confidence limits are on the original ratio scale. Standard errors for ratio effects remain on the log-ratio scale. For differences, the original difference scale is used. The current variance calculation combines treatment-specific standard errors without explicitly accounting for covariance between treatments; suitability depends on study design. Only finite effects with finite positive estimated variances contribute to the pooled estimate.
+
+This vignette displays concise, non-evaluated example commands and runs the corresponding forest plots in separate hidden-code chunks. The analysis fitting chunks are still evaluated during knitting. `cache=TRUE` may accelerate ordinary re-knitting but is not guaranteed to persist across package builds. If a particular summary cannot be plotted (e.g., no valid site effects at that order), its section displays a diagnostic instead of silently omitting the measure. The file has not been executed in R in this environment; ensure that it builds successfully against the package version being released.
+
+## <span style="color:red;">REFERENCES</span>
+
+Chao, A., Thorn, S., Chiu, C.-H., Moyes, F., Hu, K.-H., Chazdon, R. L., Wu, J., Magnago, L. F. S., Dornelas, M., Zelený, D., Colwell, R. K., and Magurran, A. E. (2023). Rarefaction and extrapolation with beta diversity under a framework of Hill numbers: the iNEXT.beta3D standardization. *Ecological Monographs*, e1588. https://doi.org/10.1002/ecm.1588

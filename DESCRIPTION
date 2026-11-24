@@ -1,0 +1,48 @@
+Package: iNEXT.meta
+Type: Package
+Title: iNterpolation and EXTrapolation with meta-analysis for beta diversity across three dimensions
+Version: 1.1.0
+Author: Anne Chao [aut, cre], Yu-Ti Lee [aut], Keng-Lei Lin [aut], Po-Yen Chuang [aut]
+Maintainer: Anne Chao <chao@stat.nthu.edu.tw>
+Authors@R:
+  c(person("Anne",
+           "Chao",
+           role = c("aut", "cre"),
+           email = "chao@stat.nthu.edu.tw"),
+    person("Yu-Ti", 
+           "Lee", 
+           role = "aut",
+           email = "didil0907@gmail.com"),
+    person("Keng-Lei", 
+           "Lin", 
+           role = "aut",
+           email = "boolin20021106@gmail.com"),
+    person("Po-Yen", 
+           "Chuang", 
+           role = "aut",
+           email = "zerind0970983096@gmail.com"))
+Description: Provides tools for meta-analysis of treatment effects on coverage-standardized taxonomic, phylogenetic, and functional diversity based on the Hill-number framework. Treatment effects between two groups are quantified using either response ratios or differences in gamma, alpha, and beta diversity, as well as four classes of dissimilarity indices. Results from multiple studies or sites are integrated through meta-analysis, and forest plots are provided to visualize site-specific and pooled treatment effects.
+License: GPL(>=3)
+Imports:
+    dplyr,
+    forestplot,
+    grid,
+    gridExtra,
+    iNEXT.3D,
+    iNEXT.beta3D,
+    magrittr,
+    metafor,
+    purrr,
+    stats,
+    stringr,
+    tibble,
+    tidyr,
+    utils
+Suggests:
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+Encoding: UTF-8
+LazyData: true
+Depends: R (>= 4.0)
+RoxygenNote: 7.3.3
